@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Memory Allocation Visualizer — Comparison Mode (Vertical)</title>
+<title>Memory Allocation Visualizer — Partition Mode</title>
 <style>
 :root{
   --bg:#04101a; --panel: rgba(255,255,255,0.04);
@@ -87,9 +87,10 @@ th,td{padding:6px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03
       <input id="memSize" type="number" value="1000" min="64">
 
       <label>Mode</label>
-      <div class="row" style="gap:12px;margin-top:6px">
-        <button id="tabSingle" class="small" style="background:linear-gradient(90deg,var(--accent),#9b5cff)">Single Mode</button>
-        <button id="tabComparison" class="small" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)">Comparison Mode</button>
+      <div class="row" style="gap:8px;margin-top:6px">
+        <button id="tabSingle" class="small" style="background:linear-gradient(90deg,var(--accent),#9b5cff)">Single</button>
+        <button id="tabComparison" class="small" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)">Compare</button>
+        <button id="tabPartition" class="small" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)">Partition</button>
       </div>
 
       <label style="margin-top:10px">Algorithm (single mode only)</label>
@@ -125,9 +126,9 @@ th,td{padding:6px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03
     </div>
   </div>
 
-  <!-- CENTER: Canvas area (single or comparison vertical) -->
+  <!-- CENTER: Canvas area (single, comparison vertical, or partition) -->
   <div class="center">
-    <!-- SINGLE -->
+    <!-- SINGLE MODE -->
     <div class="card canvas-wrap" id="singleModePanel">
       <div class="header">
         <div>
@@ -147,7 +148,7 @@ th,td{padding:6px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03
       <input id="timeline" type="range" min="0" max="0" value="0" style="width:100%;margin-top:8px">
     </div>
 
-    <!-- COMPARISON: vertical stacked -->
+    <!-- COMPARISON MODE: vertical stacked -->
     <div class="card canvas-wrap" id="comparisonPanel" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div>
@@ -158,7 +159,6 @@ th,td{padding:6px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03
       </div>
 
       <div class="comp-vertical">
-
         <!-- FIRST FIT block -->
         <div class="comp-block" id="blockFF">
           <div style="font-weight:700">First Fit</div>
@@ -197,7 +197,6 @@ th,td{padding:6px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03
           </div>
           <div class="alg-log" id="logWF">No logs yet.</div>
         </div>
-
       </div>
 
       <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">
@@ -206,6 +205,35 @@ th,td{padding:6px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03
       </div>
 
       <input id="timelineC" type="range" min="0" max="0" value="0" style="width:100%;margin-top:8px">
+    </div>
+
+    <!-- PARTITION MODE -->
+    <div class="card canvas-wrap" id="partitionPanel" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <div class="h1">Partition Mode</div>
+          <div class="hsub">Fixed partitions with process allocation</div>
+        </div>
+        <div class="hsub">Algorithm: <span id="partitionAlgoLabel">First Fit</span></div>
+      </div>
+
+      <canvas id="partitionCanvas" width="980" height="360"></canvas>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="tiny">Step: <span id="curStepP">0</span>/<span id="maxStepP">0</span></div>
+        <div class="tiny">Utilization: <span id="utilP">0%</span></div>
+      </div>
+
+      <input id="timelineP" type="range" min="0" max="0" value="0" style="width:100%;margin-top:8px">
+      
+      <!-- Execution logs moved below canvas in partition mode -->
+      <div style="margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="h1" style="font-size:14px">Execution Logs</div>
+          <div class="hsub" id="statusLabelP">Idle</div>
+        </div>
+        <div id="partitionLog" style="margin-top:8px;height:120px;overflow:auto;font-family:monospace;color:var(--muted);padding:8px;background:rgba(0,0,0,0.06);border-radius:8px">No logs yet.</div>
+      </div>
     </div>
 
     <div style="display:flex;gap:12px">
@@ -227,23 +255,67 @@ th,td{padding:6px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03
     </div>
   </div>
 
-  <!-- RIGHT: Logs (keeps single-mode log area; comparison uses per-algo logs) -->
+  <!-- RIGHT: Logs (single/compare) or Partition Inputs (partition mode) -->
   <div class="right">
-    <div class="card" style="display:flex;flex-direction:column;flex:1">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div class="h1" style="font-size:14px">Execution Logs</div>
-        <div class="hsub" id="statusLabel">Idle</div>
+    <!-- Default right panel (logs & stats for single/compare modes) -->
+    <div id="defaultRightPanel">
+      <div class="card" style="display:flex;flex-direction:column;flex:1">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="h1" style="font-size:14px">Execution Logs</div>
+          <div class="hsub" id="statusLabel">Idle</div>
+        </div>
+        <div id="log" style="margin-top:8px;flex:1;overflow:auto;font-family:monospace;color:var(--muted);padding:8px;background:rgba(0,0,0,0.06);border-radius:8px">No logs yet.</div>
       </div>
-      <div id="log" style="margin-top:8px;flex:1;overflow:auto;font-family:monospace;color:var(--muted);padding:8px;background:rgba(0,0,0,0.06);border-radius:8px">No logs yet.</div>
+
+      <div class="card" style="flex:0">
+        <div class="h1" style="font-size:14px">Statistics</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <div>Average Waiting Time: <span id="avgWaiting" style="font-weight:600">—</span></div>
+          <div>Average Turnaround: <span id="avgTurn" style="font-weight:600">—</span></div>
+          <div>External Fragmentation: <span id="extFrag" style="font-weight:600">—</span></div>
+          <div>Total Processes: <span id="totalProc" style="font-weight:600">0</span></div>
+        </div>
+      </div>
     </div>
 
-    <div class="card" style="flex:0">
-      <div class="h1" style="font-size:14px">Statistics</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-        <div>Average Waiting Time: <span id="avgWaiting" style="font-weight:600">—</span></div>
-        <div>Average Turnaround: <span id="avgTurn" style="font-weight:600">—</span></div>
-        <div>External Fragmentation: <span id="extFrag" style="font-weight:600">—</span></div>
-        <div>Total Processes: <span id="totalProc" style="font-weight:600">0</span></div>
+    <!-- Partition inputs (shown only in partition mode) -->
+    <div id="partitionRightPanel" style="display:none">
+      <div class="card">
+        <div class="header"><div class="h1">Partition Setup</div><div class="hsub">Configure fixed partitions</div></div>
+
+        <label>Partition Algorithm</label>
+        <select id="partitionAlgo">
+          <option value="first">First Fit</option>
+          <option value="best">Best Fit</option>
+          <option value="worst">Worst Fit</option>
+        </select>
+
+        <hr style="border:none;height:1px;background:rgba(255,255,255,0.03);margin:12px 0">
+
+        <div style="margin-bottom:6px" class="tiny">Add Partition</div>
+        <label>Partition ID</label><input id="partId" type="text" placeholder="Part1">
+        <label>Size (KB)</label><input id="partSize" type="number" placeholder="300" min="1">
+
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="addPartBtn" class="small">➕ Add Partition</button>
+          <button id="clearParts" class="small" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)">Clear</button>
+        </div>
+
+        <hr style="border:none;height:1px;background:rgba(255,255,255,0.03);margin:12px 0">
+
+        <div style="margin-top:6px">
+          <div class="tiny" style="margin-bottom:6px">Partitions</div>
+          <table id="partTable"><thead><tr><th>ID</th><th>Size</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="tiny" style="margin-bottom:6px">Partition Statistics</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div>Total Partition Size: <span id="totalPartSize" style="font-weight:600">0 KB</span></div>
+            <div>Available Partitions: <span id="partCount" style="font-weight:600">0</span></div>
+            <div>Largest Partition: <span id="largestPart" style="font-weight:600">—</span></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -312,8 +384,76 @@ class Renderer {
 }
 
 /* -------------------------
+   Partition Renderer (specialized for fixed partitions)
+   ------------------------- */
+class PartitionRenderer {
+  constructor(canvas){
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.dpr = window.devicePixelRatio || 1;
+    this.resize();
+    window.addEventListener('resize', ()=>this.resize());
+  }
+  resize(){
+    const rect = this.canvas.getBoundingClientRect();
+    this.canvas.width = Math.round(rect.width * this.dpr);
+    this.canvas.height = Math.round(rect.height * this.dpr);
+    this.ctx.setTransform(this.dpr,0,0,this.dpr,0,0);
+    if(this.last) this.render(this.last.partitions, this.last.allocations);
+  }
+  clear(){ this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height); }
+  render(partitions, allocations=[]){
+    this.last = {partitions, allocations};
+    const ctx = this.ctx;
+    const rect = this.canvas.getBoundingClientRect();
+    const pad = 12;
+    const width = rect.width - pad*2;
+    const height = rect.height - pad*2;
+    ctx.clearRect(0,0,rect.width,rect.height);
+    ctx.save(); ctx.translate(pad,pad);
+    
+    const totalSize = partitions.reduce((sum, p) => sum + p.size, 0);
+    let x = 0;
+    
+    for(const part of partitions){
+      const w = Math.max(1, Math.round((part.size/totalSize)*width));
+      const allocation = allocations.find(a => a.partitionId === part.id);
+      
+      if(allocation){
+        // Partition is allocated
+        const g = ctx.createLinearGradient(x,0,x+w,0); 
+        g.addColorStop(0,'#34d399'); g.addColorStop(1,'#06b6d4'); 
+        ctx.fillStyle = g;
+        ctx.fillRect(x,0,w,height);
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; ctx.strokeRect(x,0,w,height);
+        ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.font = '12px monospace'; ctx.textBaseline = 'top';
+        ctx.fillText(`${part.id}: ${allocation.procId} (${allocation.procSize}KB/${part.size}KB)`, x + 6, 6);
+        
+        // Show unused space in partition
+        if(allocation.procSize < part.size){
+          const unusedHeight = 8;
+          const unusedWidth = Math.max(1, Math.round((part.size - allocation.procSize)/part.size * w));
+          ctx.fillStyle = 'rgba(255,255,255,0.1)';
+          ctx.fillRect(x + w - unusedWidth, height - unusedHeight, unusedWidth, unusedHeight);
+        }
+      } else {
+        // Partition is free
+        const g = ctx.createLinearGradient(x,0,x+w,0); 
+        g.addColorStop(0,'#94a3b8'); g.addColorStop(1,'#475569'); 
+        ctx.fillStyle = g;
+        ctx.fillRect(x,0,w,height);
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; ctx.strokeRect(x,0,w,height);
+        ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.font = '12px monospace'; ctx.textBaseline = 'top';
+        ctx.fillText(`${part.id}: Free (${part.size}KB)`, x + 6, 6);
+      }
+      x += w;
+    }
+    ctx.restore();
+  }
+}
+
+/* -------------------------
    Utilities & trace engine
-   (complete & robust)
    ------------------------- */
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 function mergeSegments(segs){
@@ -340,23 +480,18 @@ function normalize(memSize, segs){
 }
 function findHoles(segs){ return segs.filter(s=>s.type === 'hole'); }
 
-/* generateTrace: complete implementation */
+/* generateTrace: for single/comparison modes */
 function generateTrace(memSize, processes, algo){
-  // Initialize memory segments: single hole covering full memory
   let mem = { size: memSize, segments: [{start:0,size:memSize,type:'hole'}] };
-  // Sort processes by arrival time (stable)
   const procs = clone(processes).sort((a,b)=>a.arrival - b.arrival);
   const trace = [], waiting = [], finished = [];
   let t = 0;
-  // helper: push snapshot into trace
   const push = (event, activeProc=null) => trace.push({ time: t, event, mem: clone(mem), waiting: clone(waiting), finished: clone(finished), activeProc });
-  // initial state
   push('start', null);
   const lastArrival = procs.length ? Math.max(...procs.map(p=>p.arrival)) : 0;
   const maxTime = lastArrival + procs.length * 4 + 10;
 
   while(t <= maxTime){
-    // add arrivals at current time
     const arriving = procs.filter(p=>p.arrival === t);
     for(const a of arriving){
       waiting.push({...a, state:'waiting'});
@@ -364,14 +499,12 @@ function generateTrace(memSize, processes, algo){
     }
 
     let progress = true;
-    // attempt allocations while possible (to allow multiple allocations per time tick)
     while(progress){
       progress = false;
       if(!waiting.length) break;
       const holesList = findHoles(mem.segments).map(h=>({start:h.start,size:h.size,seg:h}));
       if(!holesList.length) break;
 
-      // try each waiting proc in order
       for(let i=0;i<waiting.length;i++){
         const proc = waiting[i];
         let chosen = null;
@@ -386,7 +519,6 @@ function generateTrace(memSize, processes, algo){
         if(chosen){
           const seg = chosen.seg;
           const idx = mem.segments.indexOf(seg);
-          // allocate
           const alloc = { start: seg.start, size: proc.size, type:'alloc', procId: proc.id };
           const remain = seg.size - proc.size;
           if(remain > 0){
@@ -396,18 +528,97 @@ function generateTrace(memSize, processes, algo){
             mem.segments.splice(idx,1,alloc);
           }
           mem.segments = normalize(mem.size, mem.segments);
-          // record finish/allocated
           waiting.splice(i,1);
           finished.push({...proc, finishTime: t});
           push(`allocate ${proc.id}`, proc.id);
           progress = true;
-          break; // break to recompute holesList
+          break;
         }
       }
     }
 
-    // termination condition: all processed and nothing waiting
     if(procs.every(p=>p.arrival <= t) && waiting.length === 0){
+      push('done', null);
+      break;
+    }
+    t++;
+  }
+  push('end', null);
+  return trace;
+}
+
+/* generatePartitionTrace: for partition mode with fixed partitions */
+function generatePartitionTrace(partitions, processes, algo){
+  const trace = [];
+  const allocations = []; // {partitionId, procId, procSize}
+  const waiting = [];
+  const finished = [];
+  let t = 0;
+  
+  const push = (event, activeProc=null) => trace.push({ 
+    time: t, event, 
+    partitions: clone(partitions),
+    allocations: clone(allocations),
+    waiting: clone(waiting), 
+    finished: clone(finished), 
+    activeProc 
+  });
+  
+  push('start', null);
+  const lastArrival = processes.length ? Math.max(...processes.map(p=>p.arrival)) : 0;
+  const maxTime = lastArrival + processes.length * 4 + 10;
+
+  while(t <= maxTime){
+    // Add arriving processes
+    const arriving = processes.filter(p=>p.arrival === t);
+    for(const a of arriving){
+      waiting.push({...a, state:'waiting'});
+      push(`arrive ${a.id}`, a.id);
+    }
+
+    let progress = true;
+    while(progress){
+      progress = false;
+      if(!waiting.length) break;
+      
+      // Find free partitions
+      const freePartitions = partitions.filter(p => 
+        !allocations.some(a => a.partitionId === p.id)
+      );
+      
+      if(!freePartitions.length) break;
+
+      for(let i=0;i<waiting.length;i++){
+        const proc = waiting[i];
+        let chosenPartition = null;
+        
+        // Find suitable partition based on algorithm
+        if(algo === 'first') {
+          chosenPartition = freePartitions.find(p => p.size >= proc.size);
+        } else if(algo === 'best'){
+          chosenPartition = freePartitions.reduce((best,p)=> 
+            (p.size >= proc.size && (!best || p.size < best.size))?p:best, null);
+        } else if(algo === 'worst'){
+          chosenPartition = freePartitions.reduce((worst,p)=> 
+            (p.size >= proc.size && (!worst || p.size > worst.size))?p:worst, null);
+        }
+
+        if(chosenPartition){
+          allocations.push({
+            partitionId: chosenPartition.id,
+            procId: proc.id,
+            procSize: proc.size
+          });
+          waiting.splice(i,1);
+          finished.push({...proc, finishTime: t});
+          push(`allocate ${proc.id} in ${chosenPartition.id}`, proc.id);
+          progress = true;
+          break;
+        }
+      }
+    }
+
+    if(processes.every(p=>p.arrival <= t) && waiting.length === 0){
       push('done', null);
       break;
     }
@@ -422,14 +633,18 @@ function generateTrace(memSize, processes, algo){
    ------------------------- */
 
 const canvas = document.getElementById('memCanvas');
+const partitionCanvas = document.getElementById('partitionCanvas');
 const renderer = new Renderer(canvas);
+const partitionRenderer = new PartitionRenderer(partitionCanvas);
 
 /* comparison renderers (created lazily) */
 let rendererFF = null, rendererBF = null, rendererWF = null;
 
 let processes = [];
+let partitions = [];
 let trace = [];            // single mode trace
 let traceFF = [], traceBF = [], traceWF = []; // comparison traces
+let partitionTrace = [];   // partition mode trace
 let step = 0;
 let playing = false;
 let raf = null;
@@ -440,41 +655,102 @@ let playInterval = 600;
 /* DOM helpers */
 function $(id){ return document.getElementById(id); }
 const procTableBody = document.querySelector('#procTable tbody');
+const partTableBody = document.querySelector('#partTable tbody');
 const logEl = $('log');
 
-/* renderProcTable */
-function renderProcTable(){ procTableBody.innerHTML = ''; processes.forEach((p,i)=>{ const tr = document.createElement('tr'); tr.innerHTML = `<td>${p.id}</td><td>${p.size}</td><td>${p.arrival}</td><td style="text-align:right"><button data-i="${i}" class="icon-btn remove-proc">✖</button></td>`; procTableBody.appendChild(tr); }); $('totalProc') && ($('totalProc').innerText = processes.length); }
+/* render tables */
+function renderProcTable(){ 
+  procTableBody.innerHTML = ''; 
+  processes.forEach((p,i)=>{ 
+    const tr = document.createElement('tr'); 
+    tr.innerHTML = `<td>${p.id}</td><td>${p.size}</td><td>${p.arrival}</td><td style="text-align:right"><button data-i="${i}" class="icon-btn remove-proc">✖</button></td>`; 
+    procTableBody.appendChild(tr); 
+  }); 
+  $('totalProc') && ($('totalProc').innerText = processes.length); 
+}
 
-/* logging helper (single combined log) */
-function addLog(txt){ const t = new Date().toLocaleTimeString(); logEl.innerText = `[${t}] ${txt}\n` + logEl.innerText; }
+function renderPartTable(){ 
+  partTableBody.innerHTML = ''; 
+  partitions.forEach((p,i)=>{ 
+    const tr = document.createElement('tr'); 
+    tr.innerHTML = `<td>${p.id}</td><td>${p.size}</td><td style="text-align:right"><button data-i="${i}" class="icon-btn remove-part">✖</button></td>`; 
+    partTableBody.appendChild(tr); 
+  }); 
+  updatePartitionStats();
+}
 
-/* WIRE UI: tabs (single vs comparison) */
+function updatePartitionStats(){
+  const totalSize = partitions.reduce((sum, p) => sum + p.size, 0);
+  const largestPart = partitions.length ? Math.max(...partitions.map(p => p.size)) : 0;
+  $('totalPartSize').innerText = `${totalSize} KB`;
+  $('partCount').innerText = partitions.length;
+  $('largestPart').innerText = `${largestPart} KB`;
+}
+
+/* logging helper */
+function addLog(txt){ 
+  const t = new Date().toLocaleTimeString(); 
+  logEl.innerText = `[${t}] ${txt}\n` + logEl.innerText; 
+}
+
+function addPartitionLog(txt){ 
+  const t = new Date().toLocaleTimeString(); 
+  $('partitionLog').innerText = `[${t}] ${txt}\n` + $('partitionLog').innerText; 
+}
+
+/* WIRE UI: tabs (single vs comparison vs partition) */
 const singleTabBtn = $('tabSingle');
 const compTabBtn = $('tabComparison');
+const partTabBtn = $('tabPartition');
 const singlePanel = $('singleModePanel');
 const compPanel = $('comparisonPanel');
+const partPanel = $('partitionPanel');
+const defaultRightPanel = $('defaultRightPanel');
+const partitionRightPanel = $('partitionRightPanel');
 
-let currentMode = 'single'; // 'single' or 'comparison'
-singleTabBtn.addEventListener('click', ()=>{
-  if(currentMode === 'single') return;
-  currentMode = 'single';
-  singleTabBtn.style.background = 'linear-gradient(90deg,var(--accent),#9b5cff)';
-  singleTabBtn.style.color = 'white';
-  compTabBtn.style.background = 'transparent';
-  compTabBtn.style.color = 'var(--muted)';
-  compPanel.style.display = 'none';
-  singlePanel.style.display = 'block';
-});
-compTabBtn.addEventListener('click', ()=>{
-  if(currentMode === 'comparison') return;
-  currentMode = 'comparison';
-  compTabBtn.style.background = 'linear-gradient(90deg,var(--accent),#9b5cff)';
-  compTabBtn.style.color = 'white';
-  singleTabBtn.style.background = 'transparent';
-  singleTabBtn.style.color = 'var(--muted)';
-  singlePanel.style.display = 'none';
-  compPanel.style.display = 'block';
-});
+let currentMode = 'single'; // 'single', 'comparison', or 'partition'
+
+function switchMode(mode){
+  currentMode = mode;
+  
+  // Reset all tab styles
+  [singleTabBtn, compTabBtn, partTabBtn].forEach(btn => {
+    btn.style.background = 'transparent';
+    btn.style.border = '1px solid rgba(255,255,255,0.04)';
+    btn.style.color = 'var(--muted)';
+  });
+  
+  // Hide all panels
+  [singlePanel, compPanel, partPanel].forEach(panel => panel.style.display = 'none');
+  [defaultRightPanel, partitionRightPanel].forEach(panel => panel.style.display = 'none');
+  
+  // Activate selected mode
+  if(mode === 'single'){
+    singleTabBtn.style.background = 'linear-gradient(90deg,var(--accent),#9b5cff)';
+    singleTabBtn.style.color = 'white';
+    singlePanel.style.display = 'block';
+    defaultRightPanel.style.display = 'flex';
+  } else if(mode === 'comparison'){
+    compTabBtn.style.background = 'linear-gradient(90deg,var(--accent),#9b5cff)';
+    compTabBtn.style.color = 'white';
+    compPanel.style.display = 'block';
+    defaultRightPanel.style.display = 'flex';
+  } else if(mode === 'partition'){
+    partTabBtn.style.background = 'linear-gradient(90deg,var(--accent),#9b5cff)';
+    partTabBtn.style.color = 'white';
+    partPanel.style.display = 'block';
+    partitionRightPanel.style.display = 'block';
+    
+    // Force resize of partition canvas when switching to partition mode
+    setTimeout(() => {
+      partitionRenderer.resize();
+    }, 100);
+  }
+}
+
+singleTabBtn.addEventListener('click', ()=> switchMode('single'));
+compTabBtn.addEventListener('click', ()=> switchMode('comparison'));
+partTabBtn.addEventListener('click', ()=> switchMode('partition'));
 
 /* Controls */
 $('addProcBtn').addEventListener('click', ()=>{
@@ -486,8 +762,39 @@ $('addProcBtn').addEventListener('click', ()=>{
   renderProcTable();
   $('summaryAlloc').innerText = `Allocations: ${processes.length}`;
 });
+
+$('addPartBtn').addEventListener('click', ()=>{
+  const id = $('partId').value.trim() || `Part${partitions.length+1}`;
+  const size = parseInt($('partSize').value) || 0;
+  if(!id || size <= 0){ alert('Provide valid ID and size'); return; }
+  partitions.push({id, size});
+  renderPartTable();
+  $('partId').value = '';
+  $('partSize').value = '';
+});
+
 $('clearProcs').addEventListener('click', ()=>{ processes = []; renderProcTable(); $('summaryAlloc').innerText = 'Allocations: 0'; });
-procTableBody.addEventListener('click', (e)=>{ if(e.target.classList.contains('remove-proc')){ processes.splice(+e.target.dataset.i,1); renderProcTable(); $('summaryAlloc').innerText = `Allocations: ${processes.length}`; } });
+$('clearParts').addEventListener('click', ()=>{ partitions = []; renderPartTable(); });
+
+procTableBody.addEventListener('click', (e)=>{ 
+  if(e.target.classList.contains('remove-proc')){ 
+    processes.splice(+e.target.dataset.i,1); 
+    renderProcTable(); 
+    $('summaryAlloc').innerText = `Allocations: ${processes.length}`; 
+  } 
+});
+
+partTableBody.addEventListener('click', (e)=>{ 
+  if(e.target.classList.contains('remove-part')){ 
+    partitions.splice(+e.target.dataset.i,1); 
+    renderPartTable(); 
+  } 
+});
+
+/* Partition algorithm change */
+$('partitionAlgo').addEventListener('change', ()=>{
+  $('partitionAlgoLabel').innerText = $('partitionAlgo').options[$('partitionAlgo').selectedIndex].text;
+});
 
 /* Run / generate trace - branching based on currentMode */
 function runGenerateTrace(){
@@ -507,8 +814,7 @@ function runGenerateTrace(){
     updateView();
     computeStats();
     showFloatingBar();
-  } else {
-    // comparison: compute 3 traces in parallel
+  } else if(currentMode === 'comparison'){
     traceFF = generateTrace(memSize, processes, 'first');
     traceBF = generateTrace(memSize, processes, 'best');
     traceWF = generateTrace(memSize, processes, 'worst');
@@ -517,56 +823,116 @@ function runGenerateTrace(){
     $('timelineC').max = Math.max(0, maxLen - 1);
     $('timelineC').value = 0;
     $('maxStepC').innerText = maxLen - 1;
-    // clear per-algo logs
     $('logFF').innerText = 'Comparison run started.\n';
     $('logBF').innerText = 'Comparison run started.\n';
     $('logWF').innerText = 'Comparison run started.\n';
     addLog(`Generated comparison traces — FF:${traceFF.length}, BF:${traceBF.length}, WF:${traceWF.length}`);
-    // create renderers lazily
     if(!rendererFF){ rendererFF = new Renderer($('canvasFF')); }
     if(!rendererBF){ rendererBF = new Renderer($('canvasBF')); }
     if(!rendererWF){ rendererWF = new Renderer($('canvasWF')); }
     updateComparisonView();
     computeComparisonStats();
     showFloatingBar();
+  } else if(currentMode === 'partition'){
+    if(partitions.length === 0){ alert('Add at least one partition'); return; }
+    const algo = $('partitionAlgo').value;
+    partitionTrace = generatePartitionTrace(partitions, processes, algo);
+    step = 0;
+    $('timelineP').max = Math.max(0, partitionTrace.length - 1);
+    $('timelineP').value = 0;
+    $('maxStepP').innerText = partitionTrace.length - 1;
+    $('partitionLog').innerText = '';
+    addPartitionLog(`Generated partition trace (${partitionTrace.length} steps) using ${algo}`);
+    updatePartitionView();
+    computePartitionStats();
+    showFloatingBar();
   }
 }
+
 $('runBtn').addEventListener('click', runGenerateTrace);
 $('runBtnBottom').addEventListener('click', runGenerateTrace);
 
-/* Floating controls actions (work in both modes; in comparison they operate in lock-step) */
+/* Floating controls actions */
 $('playBtn').addEventListener('click', ()=>{
   if(currentMode === 'single' && !trace.length) runGenerateTrace();
   if(currentMode === 'comparison' && (!traceFF.length && !traceBF.length && !traceWF.length)) runGenerateTrace();
-  if((currentMode === 'single' && !trace.length) || (currentMode === 'comparison' && !traceFF.length && !traceBF.length && !traceWF.length)) return;
+  if(currentMode === 'partition' && !partitionTrace.length) runGenerateTrace();
+  if((currentMode === 'single' && !trace.length) || 
+     (currentMode === 'comparison' && !traceFF.length && !traceBF.length && !traceWF.length) ||
+     (currentMode === 'partition' && !partitionTrace.length)) return;
   if(playing) return;
   playing = true; lastTime = performance.now(); playAccumulator = 0;
   raf = requestAnimationFrame(playLoop);
   addLog('Playback started');
   $('statusLabel').innerText = 'Playing';
+  $('statusLabelP').innerText = 'Playing';
 });
 $('pauseBtn').addEventListener('click', ()=>{
-  if(!playing){ $('statusLabel').innerText = 'Paused'; return; }
+  if(!playing){ $('statusLabel').innerText = 'Paused'; $('statusLabelP').innerText = 'Paused'; return; }
   playing = false; if(raf){ cancelAnimationFrame(raf); raf = null; }
-  addLog('Playback paused'); $('statusLabel').innerText = 'Paused';
+  addLog('Playback paused'); 
+  $('statusLabel').innerText = 'Paused';
+  $('statusLabelP').innerText = 'Paused';
 });
 $('nextBtn').addEventListener('click', ()=> stepForward());
 $('prevBtn').addEventListener('click', ()=> stepBack());
-$('restartBtn').addEventListener('click', ()=>{ if(currentMode==='single'){ if(!trace.length) return; step=0; updateView(); } else { if(!traceFF.length && !traceBF.length && !traceWF.length) return; step=0; updateComparisonView(); } addLog('Restarted'); $('statusLabel').innerText = 'Restarted'; });
+$('restartBtn').addEventListener('click', ()=>{ 
+  if(currentMode==='single'){ 
+    if(!trace.length) return; 
+    step=0; updateView(); 
+  } else if(currentMode==='comparison'){ 
+    if(!traceFF.length && !traceBF.length && !traceWF.length) return; 
+    step=0; updateComparisonView(); 
+  } else if(currentMode==='partition'){ 
+    if(!partitionTrace.length) return; 
+    step=0; updatePartitionView(); 
+  } 
+  addLog('Restarted'); 
+  $('statusLabel').innerText = 'Restarted';
+  $('statusLabelP').innerText = 'Restarted';
+});
 
 /* exports & clear */
-$('exportPNG').addEventListener('click', ()=>{ const url = canvas.toDataURL('image/png'); const a = document.createElement('a'); a.href = url; a.download = 'memory_alloc.png'; a.click(); });
-$('exportTrace').addEventListener('click', ()=>{ if(currentMode==='single'){ if(!trace.length){ alert('No trace. Run first.'); return; } const blob = new Blob([JSON.stringify(trace,null,2)],{type:'application/json'}); const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = 'trace.json'; a.click(); URL.revokeObjectURL(u); } else { const combined = { first: traceFF, best: traceBF, worst: traceWF }; const blob = new Blob([JSON.stringify(combined,null,2)],{type:'application/json'}); const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = 'comparison_trace.json'; a.click(); URL.revokeObjectURL(u); } });
-$('clearAll').addEventListener('click', ()=>{ if(!confirm('Clear everything?')) return; processes = []; trace = []; traceFF = []; traceBF = []; traceWF = []; step = 0; renderProcTable(); updateView(); updateComparisonView(); $('log').innerText = 'No logs yet.'; $('summaryAlloc').innerText = 'Allocations: 0'; $('statusLabel').innerText = 'Idle'; hideFloatingBar(); });
+$('exportPNG').addEventListener('click', ()=>{ 
+  const url = (currentMode === 'partition' ? partitionCanvas : canvas).toDataURL('image/png'); 
+  const a = document.createElement('a'); a.href = url; a.download = 'memory_alloc.png'; a.click(); 
+});
+$('exportTrace').addEventListener('click', ()=>{ 
+  if(currentMode==='single'){ 
+    if(!trace.length){ alert('No trace. Run first.'); return; } 
+    const blob = new Blob([JSON.stringify(trace,null,2)],{type:'application/json'}); 
+    const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = 'trace.json'; a.click(); URL.revokeObjectURL(u); 
+  } else if(currentMode==='comparison'){ 
+    const combined = { first: traceFF, best: traceBF, worst: traceWF }; 
+    const blob = new Blob([JSON.stringify(combined,null,2)],{type:'application/json'}); 
+    const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = 'comparison_trace.json'; a.click(); URL.revokeObjectURL(u); 
+  } else if(currentMode==='partition'){ 
+    if(!partitionTrace.length){ alert('No trace. Run first.'); return; } 
+    const blob = new Blob([JSON.stringify(partitionTrace,null,2)],{type:'application/json'}); 
+    const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = 'partition_trace.json'; a.click(); URL.revokeObjectURL(u); 
+  } 
+});
+$('clearAll').addEventListener('click', ()=>{ 
+  if(!confirm('Clear everything?')) return; 
+  processes = []; partitions = []; 
+  trace = []; traceFF = []; traceBF = []; traceWF = []; partitionTrace = []; 
+  step = 0; 
+  renderProcTable(); renderPartTable(); 
+  updateView(); updateComparisonView(); updatePartitionView(); 
+  $('log').innerText = 'No logs yet.'; 
+  $('partitionLog').innerText = 'No logs yet.';
+  $('summaryAlloc').innerText = 'Allocations: 0'; 
+  $('statusLabel').innerText = 'Idle'; 
+  $('statusLabelP').innerText = 'Idle';
+  hideFloatingBar(); 
+});
 
 /* speed & timeline wiring */
-document.querySelectorAll('[id^=speed]').forEach(el=>{
-  el && el.addEventListener && el.addEventListener('input', (e)=>{ const v = parseFloat(e.target.value); document.getElementById('speedLabel') && (document.getElementById('speedLabel').innerText = v.toFixed(2) + 'x'); playInterval = 700 / v; });
-});
 $('timeline').addEventListener('input', ()=>{ step = parseInt($('timeline').value) || 0; updateView(); });
 $('timelineC').addEventListener('input', ()=>{ step = parseInt($('timelineC').value) || 0; updateComparisonView(); });
+$('timelineP').addEventListener('input', ()=>{ step = parseInt($('timelineP').value) || 0; updatePartitionView(); });
 
-/* play loop - applies to both modes (in comparison it advances all traces in sync) */
+/* play loop */
 function playLoop(now){
   if(!playing){ if(raf){ cancelAnimationFrame(raf); raf = null; } return; }
   raf = requestAnimationFrame(playLoop);
@@ -578,19 +944,39 @@ function playLoop(now){
     if(currentMode === 'single'){
       if(step < trace.length - 1){ step++; updateView(); $('timeline').value = step; }
       else { playing = false; if(raf){ cancelAnimationFrame(raf); raf = null; } addLog('Playback finished'); $('statusLabel').innerText = 'Finished'; }
-    } else {
+    } else if(currentMode === 'comparison'){
       const maxLen = Math.max(traceFF.length, traceBF.length, traceWF.length);
       if(step < maxLen - 1){ step++; updateComparisonView(); $('timelineC').value = step; }
       else { playing = false; if(raf){ cancelAnimationFrame(raf); raf = null; } addLog('Playback finished (comparison)'); $('statusLabel').innerText = 'Finished'; }
+    } else if(currentMode === 'partition'){
+      if(step < partitionTrace.length - 1){ step++; updatePartitionView(); $('timelineP').value = step; }
+      else { playing = false; if(raf){ cancelAnimationFrame(raf); raf = null; } addPartitionLog('Playback finished'); $('statusLabelP').innerText = 'Finished'; }
     }
   }
 }
 
 /* step controls */
-function stepForward(){ if(currentMode === 'single'){ if(trace.length && step < trace.length - 1){ step++; updateView(); $('timeline').value = step; } } else { const maxLen = Math.max(traceFF.length, traceBF.length, traceWF.length); if(step < maxLen - 1){ step++; updateComparisonView(); $('timelineC').value = step; } } }
-function stepBack(){ if(currentMode === 'single'){ if(trace.length && step > 0){ step--; updateView(); $('timeline').value = step; } } else { if(step > 0){ step--; updateComparisonView(); $('timelineC').value = step; } } }
+function stepForward(){ 
+  if(currentMode === 'single'){ 
+    if(trace.length && step < trace.length - 1){ step++; updateView(); $('timeline').value = step; } 
+  } else if(currentMode === 'comparison'){ 
+    const maxLen = Math.max(traceFF.length, traceBF.length, traceWF.length); 
+    if(step < maxLen - 1){ step++; updateComparisonView(); $('timelineC').value = step; } 
+  } else if(currentMode === 'partition'){ 
+    if(partitionTrace.length && step < partitionTrace.length - 1){ step++; updatePartitionView(); $('timelineP').value = step; } 
+  } 
+}
+function stepBack(){ 
+  if(currentMode === 'single'){ 
+    if(trace.length && step > 0){ step--; updateView(); $('timeline').value = step; } 
+  } else if(currentMode === 'comparison'){ 
+    if(step > 0){ step--; updateComparisonView(); $('timelineC').value = step; } 
+  } else if(currentMode === 'partition'){ 
+    if(partitionTrace.length && step > 0){ step--; updatePartitionView(); $('timelineP').value = step; } 
+  } 
+}
 
-/* update view (single mode) - unchanged */
+/* update view (single mode) */
 function updateView(){
   if(!trace.length){ renderer.clear(); $('curStep').innerText = 0; $('maxStep').innerText = 0; $('util').innerText = '0%'; $('summarySteps').innerText = 'Steps: 0'; return; }
   const frame = trace[step];
@@ -606,30 +992,15 @@ function updateView(){
   $('summaryAlloc').innerText = `Allocations: ${processes.length}`;
 }
 
-/* helper: compute F3 fragmentation metrics for a memory snapshot */
-function computeF3(mem){
-  if(!mem || !mem.segments) return {freeBlocks:0, largestFree:0, extFrag:0, util:0};
-  const holes = mem.segments.filter(s=>s.type==='hole');
-  const freeBlocks = holes.length;
-  const largestFree = holes.reduce((m,h)=>Math.max(m,h.size),0);
-  const extFrag = holes.reduce((s,h)=>s+h.size,0);
-  const used = mem.segments.filter(s=>s.type==='alloc').reduce((s,v)=>s+v.size,0);
-  const util = mem.size ? Math.round((used / mem.size) * 100) : 0;
-  return {freeBlocks, largestFree, extFrag, util};
-}
-
-/* update comparison view - renders all three traces at current step in lock-step, updates per-algo logs and F3 stats */
+/* update comparison view */
 function updateComparisonView(){
-  // ensure renderers exist
   if(rendererFF && traceFF.length) {
     const idx = Math.min(step, traceFF.length - 1);
     const fff = traceFF[idx];
     rendererFF.render(fff.mem, fff.activeProc);
-    // per-algo log: append only new events at that index
     if(idx >= 0) {
       $('logFF').innerText = `t=${fff.time} | ${fff.event}\n` + $('logFF').innerText;
     }
-    // stats
     const s = computeF3(fff.mem);
     $('statFF').innerText = `Util: ${s.util}%`;
     $('fragCountFF').innerText = `Free blocks: ${s.freeBlocks}`;
@@ -665,11 +1036,9 @@ function updateComparisonView(){
     $('extFragWF').innerText = `Ext frag: ${s.extFrag} KB`;
   } else if(rendererWF) { rendererWF.clear(); $('statWF').innerText = 'No alloc'; }
 
-  // update comparison summary in the right panel (keeps single combined log area for short messages)
   const maxLen = Math.max(traceFF.length, traceBF.length, traceWF.length);
   $('curStepC').innerText = step;
   $('maxStepC').innerText = Math.max(0, maxLen - 1);
-  // compute average util across the three at this step for a simple "global" metric
   const uFF = (traceFF.length ? computeF3(traceFF[Math.min(step, traceFF.length-1)].mem).util : 0);
   const uBF = (traceBF.length ? computeF3(traceBF[Math.min(step, traceBF.length-1)].mem).util : 0);
   const uWF = (traceWF.length ? computeF3(traceWF[Math.min(step, traceWF.length-1)].mem).util : 0);
@@ -680,7 +1049,46 @@ function updateComparisonView(){
   $('summaryAlloc').innerText = `Allocations: ${processes.length}`;
 }
 
-/* compute simple stats for single mode (unchanged) */
+/* update partition view */
+function updatePartitionView(){
+  if(!partitionTrace.length){ 
+    partitionRenderer.clear(); 
+    $('curStepP').innerText = 0; 
+    $('maxStepP').innerText = 0; 
+    $('utilP').innerText = '0%'; 
+    $('summarySteps').innerText = 'Steps: 0'; 
+    return; 
+  }
+  const frame = partitionTrace[step];
+  partitionRenderer.render(frame.partitions, frame.allocations);
+  $('curStepP').innerText = step; 
+  $('maxStepP').innerText = partitionTrace.length - 1;
+  $('statusLabelP').innerText = frame.event;
+  $('partitionLog').innerText = '';
+  for(let i=0;i<=step;i++){ const f = partitionTrace[i]; $('partitionLog').innerText += `[t=${f.time}] ${f.event}\n`; }
+  
+  // Calculate utilization for partition mode
+  const allocatedSize = frame.allocations.reduce((sum, a) => sum + a.procSize, 0);
+  const totalPartitionSize = frame.partitions.reduce((sum, p) => sum + p.size, 0);
+  const util = totalPartitionSize ? Math.round((allocatedSize / totalPartitionSize) * 100) : 0;
+  $('utilP').innerText = util + '%';
+  $('summarySteps').innerText = `Steps: ${partitionTrace.length}`;
+  $('summaryAlloc').innerText = `Allocations: ${processes.length}`;
+}
+
+/* helper: compute F3 fragmentation metrics for a memory snapshot */
+function computeF3(mem){
+  if(!mem || !mem.segments) return {freeBlocks:0, largestFree:0, extFrag:0, util:0};
+  const holes = mem.segments.filter(s=>s.type==='hole');
+  const freeBlocks = holes.length;
+  const largestFree = holes.reduce((m,h)=>Math.max(m,h.size),0);
+  const extFrag = holes.reduce((s,h)=>s+h.size,0);
+  const used = mem.segments.filter(s=>s.type==='alloc').reduce((s,v)=>s+v.size,0);
+  const util = mem.size ? Math.round((used / mem.size) * 100) : 0;
+  return {freeBlocks, largestFree, extFrag, util};
+}
+
+/* compute simple stats for single mode */
 function computeStats(){
   if(!trace.length){ $('avgWaiting').innerText='—'; $('avgTurn').innerText='—'; $('extFrag').innerText='—'; $('totalProc').innerText = processes.length; return; }
   const last = trace[trace.length-1]; const finished = last.finished || [];
@@ -694,12 +1102,28 @@ function computeStats(){
   $('totalProc').innerText = processes.length;
 }
 
+function computeComparisonStats(){
+  // Implementation for comparison stats if needed
+}
+
+function computePartitionStats(){
+  // Implementation for partition stats if needed
+}
+
 /* show/hide floating bar */
 function showFloatingBar(){ const bar = $('floatingBar'); bar.classList.add('visible'); bar.setAttribute('aria-hidden','false'); }
 function hideFloatingBar(){ const bar = $('floatingBar'); bar.classList.remove('visible'); bar.setAttribute('aria-hidden','true'); }
 
 /* init demo */
 renderProcTable();
+// Initialize with some sample partitions
+partitions = [
+  {id: 'Part1', size: 300},
+  {id: 'Part2', size: 200},
+  {id: 'Part3', size: 400}
+];
+renderPartTable();
+
 (function seed(){
   processes = [{id:'P1',size:200,arrival:0},{id:'P2',size:350,arrival:1},{id:'P3',size:100,arrival:2}];
   renderProcTable(); $('summaryAlloc').innerText = `Allocations: ${processes.length}`;
