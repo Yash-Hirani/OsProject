@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Memory Allocation Visualizer — Glassmorphism (Fixed Play/Pause)</title>
+<style>
+  :root{
+    --bg:#0b1220;
+    --panel: rgba(255,255,255,0.06);
+    --accent: rgba(124,58,237,0.8);
+    --glass-border: rgba(255,255,255,0.08);
+    --text: #e6eef8;
+    --muted: #b8c2d6;
+    --ok: #34d399;
+    --hole: #94a3b8;
+    --active: #facc15;
+  }
+  *{box-sizing:border-box;font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, monospace;}
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#061025 0%, #07102a 60%);color:var(--text);-webkit-font-smoothing:antialiased;}
+  .app{display:grid;grid-template-columns:320px 1fr 320px;gap:18px;padding:18px;height:100vh;}
+  .panel{
+    background:var(--panel);
+    border-radius:14px;
+    padding:14px;
+    border:1px solid var(--glass-border);
+    backdrop-filter: blur(8px) saturate(120%);
+    box-shadow: 0 6px 24px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
+    overflow:auto;
+  }
+  h1{font-size:16px;margin:0 0 12px 0;letter-spacing:0.4px}
+  h2{font-size:13px;margin:10px 0;color:var(--muted)}
+  label{font-size:12px;color:var(--muted);display:block;margin-top:10px}
+  input[type="text"], input[type="number"], select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text)}
+  button{padding:8px 10px;border-radius:8px;border:none;background:var(--accent);color:white;font-weight:600;cursor:pointer}
+  .ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--text)}
+  .muted-btn{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
+  .small{padding:6px 8px;font-size:13px;border-radius:6px}
+  .row{display:flex;gap:8px;align-items:center}
+  .col{display:flex;flex-direction:column;gap:8px}
+  .center{display:flex;align-items:center;justify-content:center}
+  .canvas-wrap{display:flex;flex-direction:column;align-items:center;gap:10px}
+  canvas{background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:10px; width:100%; max-width:920px; height:260px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;color:var(--muted)}
+  th,td{padding:6px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03)}
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .legend{display:flex;gap:8px;align-items:center;margin-top:6px}
+  .swatch{width:14px;height:14px;border-radius:3px;display:inline-block}
+  #log{height:160px;overflow:auto;background:transparent;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.02);color:var(--muted);font-size:13px}
+  .stat{font-weight:600;color:var(--text)}
+  .top-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+  .footer-controls{display:flex;gap:8px;align-items:center}
+  .speed-input{width:120px}
+  input[type=range]{accent-color:var(--accent)}
+  .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.02);font-size:13px;color:var(--muted)}
+  .table-small td{font-size:13px;color:var(--text)}
+  .btn-red{background:rgba(220,38,38,0.9)}
+  .btn-export{background:rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.04)}
+  @media (max-width: 980px){
+    .app{grid-template-columns:1fr;grid-auto-rows:auto;padding:12px}
+    canvas{height:200px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- LEFT: Inputs -->
+  <div class="panel" id="leftPanel">
+    <div class="top-row">
+      <h1>Memory Setup & Resources</h1>
+      <div class="pill">Glass UI</div>
+    </div>
+
+    <label>Memory Size (KB)</label>
+    <input id="memSize" type="number" value="1000" min="64" step="1">
+
+    <h2>Algorithm</h2>
+    <div class="row">
+      <label style="margin-right:8px"><input type="radio" name="algo" value="first" checked> First Fit</label>
+      <label style="margin-right:8px"><input type="radio" name="algo" value="best"> Best Fit</label>
+      <label><input type="radio" name="algo" value="worst"> Worst Fit</label>
+    </div>
+
+    <hr style="border:none;height:1px;background:rgba(255,255,255,0.03);margin:10px 0">
+
+    <h2>Add Process</h2>
+    <div class="col">
+      <label>Process ID</label><input id="procId" type="text" placeholder="P1">
+      <label>Size (KB)</label><input id="procSize" type="number" placeholder="200" min="1">
+      <label>Arrival Time (integer)</label><input id="procArrival" type="number" value="0" min="0" step="1">
+      <div class="row">
+        <button id="addProcBtn" class="small">➕ Add Process</button>
+        <button id="clearProcs" class="small ghost">🧹 Clear</button>
+      </div>
+    </div>
+
+    <h2 style="margin-top:14px">Processes (Queue)</h2>
+    <table id="procTable" class="table-small">
+      <thead><tr><th>ID</th><th>Size</th><th>Arrival</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <hr style="border:none;height:1px;background:rgba(255,255,255,0.03);margin:10px 0">
+
+    <h2>Add Memory Hole</h2>
+    <div class="col">
+      <label>Start Address (KB)</label><input id="holeStart" type="number" placeholder="0" min="0">
+      <label>Size (KB)</label><input id="holeSize" type="number" placeholder="200" min="1">
+      <div class="row">
+        <button id="addHoleBtn" class="small">➕ Add Hole</button>
+        <button id="resetHoles" class="small ghost">Reset Holes</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">If you add holes they will be merged and normalized. Leave empty to use single full hole.</div>
+    </div>
+
+    <h2 style="margin-top:12px">Memory Holes</h2>
+    <table id="holeTable">
+      <thead><tr><th>Start</th><th>Size</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div style="height:10px"></div>
+    <div class="row">
+      <button id="runBtn" class="small">▶ Generate Trace</button>
+      <button id="exportPNG" class="small btn-export">Export PNG</button>
+    </div>
+  </div>
+
+  <!-- CENTER: Canvas and controls -->
+  <div class="panel canvas-wrap" id="centerPanel">
+    <div style="width:100%;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <h1 style="margin:0">Memory Visualization</h1>
+        <div style="font-size:12px;color:var(--muted)">Canvas shows memory segments. Use controls below to play and step.</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:13px;color:var(--muted)">Algorithm: <span id="algoLabel" class="pill">First Fit</span></div>
+        <div style="font-size:13px;color:var(--muted)">Step: <span id="curStep">0</span>/<span id="maxStep">0</span></div>
+      </div>
+    </div>
+
+    <canvas id="memCanvas" width="920" height="260"></canvas>
+
+    <div style="width:100%;max-width:920px;display:flex;flex-direction:column;gap:8px;">
+      <div class="controls">
+        <button id="playBtn" class="small">▶ Play</button>
+        <button id="pauseBtn" class="small muted-btn">⏸ Pause</button>
+        <button id="prevBtn" class="small ghost">⏮ Prev</button>
+        <button id="nextBtn" class="small ghost">⏭ Next</button>
+        <button id="restartBtn" class="small">🔁 Restart</button>
+        <div style="flex:1"></div>
+        <label style="font-size:12px;color:var(--muted);margin-right:6px">Speed</label>
+        <input id="speed" type="range" min="0.25" max="3" step="0.25" value="1" class="speed-input">
+        <span id="speedLabel" class="pill">1.0x</span>
+      </div>
+
+      <input id="timeline" type="range" min="0" max="0" value="0" step="1">
+
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="legend">
+          <div style="display:flex;gap:6px;align-items:center"><span class="swatch" style="background:linear-gradient(90deg,#34d399,#06b6d4)"></span><div style="font-size:13px;color:var(--muted)">Allocated</div></div>
+          <div style="display:flex;gap:6px;align-items:center"><span class="swatch" style="background:linear-gradient(90deg,#94a3b8,#475569)"></span><div style="font-size:13px;color:var(--muted)">Hole</div></div>
+          <div style="display:flex;gap:6px;align-items:center"><span class="swatch" style="background:var(--active)"></span><div style="font-size:13px;color:var(--muted)">Active</div></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="font-size:13px;color:var(--muted)">Utilization</div><div id="util" class="pill">0%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Logs & Stats -->
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h1 style="margin:0">Execution</h1>
+      <div style="font-size:12px;color:var(--muted)"><span id="statusLabel">Idle</span></div>
+    </div>
+
+    <h2>Logs</h2>
+    <div id="log"></div>
+
+    <h2 style="margin-top:12px">Statistics</h2>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div>Average Waiting Time: <span id="avgWaiting" class="stat">—</span></div>
+      <div>Average Turnaround: <span id="avgTurn" class="stat">—</span></div>
+      <div>External Fragmentation: <span id="extFrag" class="stat">—</span></div>
+      <div>Total Processes: <span id="totalProc" class="stat">0</span></div>
+    </div>
+
+    <div style="height:10px"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="exportTrace" class="small btn-export">Export Trace (JSON)</button>
+      <button id="clearAll" class="small btn-red">Clear All</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Renderer */
+class Renderer {
+  constructor(canvas){ this.canvas = canvas; this.ctx = canvas.getContext('2d'); }
+  clear(){ this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height); }
+  render(mem, activeProcId = null){
+    const ctx = this.ctx; const c = this.canvas; this.clear();
+    const pad = 24; const width = c.width - pad*2; const height = c.height - pad*2;
+    ctx.save(); ctx.translate(pad, pad);
+    const total = mem.size || 1; let x = 0;
+    for(const seg of mem.segments){
+      const w = Math.max(1, Math.round((seg.size/total)*width));
+      if(seg.type === 'alloc'){
+        const g = ctx.createLinearGradient(x,0,x+w,0); g.addColorStop(0,'#34d399'); g.addColorStop(1,'#06b6d4'); ctx.fillStyle = g;
+      } else {
+        const g = ctx.createLinearGradient(x,0,x+w,0); g.addColorStop(0,'#94a3b8'); g.addColorStop(1,'#475569'); ctx.fillStyle = g;
+      }
+      ctx.fillRect(x, 0, w, height);
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; ctx.strokeRect(x, 0, w, height);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.font = '13px monospace'; ctx.textBaseline = 'top';
+      const label = seg.type === 'alloc' ? `${seg.procId} (${seg.size}KB)` : `Hole (${seg.size}KB)`;
+      ctx.fillText(label, x + 8, 8);
+      if(activeProcId && seg.procId === activeProcId){
+        ctx.save(); ctx.strokeStyle = 'rgba(250,204,21,0.95)'; ctx.lineWidth = 4; ctx.strokeRect(x-2, 0, w+4, height); ctx.restore();
+      }
+      x += w;
+    }
+    ctx.restore();
+  }
+}
+
+/* Utilities */
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function mergeSegments(segs){
+  if(!segs.length) return [];
+  const sorted = segs.slice().sort((a,b)=>a.start-b.start);
+  const out = [];
+  for(const s of sorted){
+    if(!out.length) out.push({...s});
+    else {
+      const last = out[out.length-1];
+      if(last.type === 'hole' && s.type === 'hole' && last.start + last.size === s.start){
+        last.size += s.size;
+      } else out.push({...s});
+    }
+  }
+  return out;
+}
+function normalize(memSize, segs){
+  const sorted = segs.slice().sort((a,b)=>a.start-b.start);
+  const out = []; let cursor = 0;
+  for(const s of sorted){
+    if(s.start > cursor) out.push({start:cursor, size: s.start - cursor, type:'hole'});
+    const end = Math.min(s.start + s.size, memSize);
+    out.push({...s, start: s.start, size: Math.max(0, end - s.start)});
+    cursor = end;
+  }
+  if(cursor < memSize) out.push({start:cursor, size:memSize - cursor, type:'hole'});
+  return mergeSegments(out);
+}
+function findHoles(segs){ return segs.filter(s=>s.type==='hole'); }
+
+/* Trace generator */
+function generateTrace(memSize, processes, algo, holes = []){
+  let mem;
+  if(holes && holes.length){
+    const initial = holes.map(h=>({start: Math.max(0, Math.floor(h.start)), size: Math.max(0, Math.floor(h.size)), type:'hole'}));
+    mem = { size: memSize, segments: normalize(memSize, initial) };
+  } else {
+    mem = { size: memSize, segments: [{start:0, size:memSize, type:'hole'}] };
+  }
+  const procs = clone(processes).sort((a,b)=>a.arrival - b.arrival);
+  const trace = []; const waiting = []; const finished = [];
+  let t = 0;
+  const push = (event, activeProc=null) => { trace.push({ time: t, event, mem: clone(mem), waiting: clone(waiting), finished: clone(finished), activeProc }); };
+  push('start', null);
+  const lastArrival = procs.length ? Math.max(...procs.map(p=>p.arrival)) : 0;
+  const maxTime = lastArrival + procs.length * 4 + 10;
+  while(t <= maxTime){
+    const arriving = procs.filter(p=>p.arrival === t);
+    for(const a of arriving){ waiting.push({...a, state:'waiting'}); push(`arrive ${a.id}`, a.id); }
+    let progress = true;
+    while(progress){
+      progress = false;
+      if(!waiting.length) break;
+      const holesList = findHoles(mem.segments).map(h=>({start:h.start,size:h.size,seg:h}));
+      if(!holesList.length) break;
+      for(let i=0;i<waiting.length;i++){
+        const proc = waiting[i];
+        let chosen = null;
+        if(algo === 'first') chosen = holesList.find(h=>h.size >= proc.size);
+        else if(algo === 'best') chosen = holesList.reduce((best,h)=> (h.size >= proc.size && (!best || h.size < best.size))?h:best, null);
+        else if(algo === 'worst') chosen = holesList.reduce((worst,h)=> (h.size >= proc.size && (!worst || h.size > worst.size))?h:worst, null);
+        if(chosen){
+          const seg = chosen.seg; const idx = mem.segments.indexOf(seg);
+          const alloc = { start: seg.start, size: proc.size, type: 'alloc', procId: proc.id };
+          const remain = seg.size - proc.size;
+          if(remain > 0){ const hole = { start: seg.start + proc.size, size: remain, type:'hole' }; mem.segments.splice(idx, 1, alloc, hole); }
+          else { mem.segments.splice(idx, 1, alloc); }
+          mem.segments = normalize(mem.size, mem.segments);
+          waiting.splice(i,1); finished.push({...proc, finishTime: t});
+          push(`allocate ${proc.id}`, proc.id);
+          progress = true; break;
+        }
+      }
+    }
+    if(procs.every(p=>p.arrival <= t) && waiting.length === 0){ push('done', null); break; }
+    t++;
+  }
+  push('end', null);
+  return trace;
+}
+
+/* App State & DOM */
+const canvas = document.getElementById('memCanvas');
+const renderer = new Renderer(canvas);
+let processes = [];
+let holes = [];
+let trace = [];
+let step = 0;
+let playing = false;
+let raf = null;
+let lastTime = 0;
+let playAccumulator = 0;
+let playInterval = 600;
+
+function $(id){ return document.getElementById(id); }
+const procTableBody = document.querySelector('#procTable tbody');
+const holeTableBody = document.querySelector('#holeTable tbody');
+const logEl = $('log');
+
+function renderProcTable(){ procTableBody.innerHTML = ''; processes.forEach((p,i)=>{ const tr = document.createElement('tr'); tr.innerHTML = `<td>${p.id}</td><td>${p.size}</td><td>${p.arrival}</td><td style="text-align:right"><button data-i="${i}" class="small ghost remove-proc">✖</button></td>`; procTableBody.appendChild(tr); }); }
+function renderHoleTable(){ holeTableBody.innerHTML = ''; holes.forEach((h,i)=>{ const tr = document.createElement('tr'); tr.innerHTML = `<td>${h.start}</td><td>${h.size}</td><td style="text-align:right"><button data-i="${i}" class="small ghost remove-hole">✖</button></td>`; holeTableBody.appendChild(tr); }); }
+function addLog(txt){ const time = new Date().toLocaleTimeString(); logEl.innerText += `[${time}] ${txt}\n`; logEl.scrollTop = logEl.scrollHeight; }
+
+/* Controls wiring */
+$('addProcBtn').addEventListener('click', ()=>{
+  const id = $('procId').value.trim() || `P${processes.length+1}`;
+  const size = parseInt($('procSize').value) || 0;
+  const arrival = parseInt($('procArrival').value) || 0;
+  if(!id || size <= 0){ alert('Provide valid ID and size'); return; }
+  processes.push({id, size, arrival});
+  renderProcTable(); updateTotals();
+});
+$('clearProcs').addEventListener('click', ()=>{ processes = []; renderProcTable(); updateTotals(); });
+procTableBody.addEventListener('click', (e)=>{ if(e.target.classList.contains('remove-proc')){ const idx = +e.target.dataset.i; processes.splice(idx,1); renderProcTable(); updateTotals(); } });
+
+$('addHoleBtn').addEventListener('click', ()=>{
+  const s = parseInt($('holeStart').value);
+  const sz = parseInt($('holeSize').value);
+  const memSize = parseInt($('memSize').value) || 0;
+  if(isNaN(s) || isNaN(sz) || sz<=0){ alert('Provide valid start and size for hole'); return; }
+  if(s < 0 || s >= memSize){ alert('Start must be within memory size'); return; }
+  holes.push({start: s, size: Math.min(sz, memSize - s)});
+  holes = mergeHoleInputs(holes); renderHoleTable();
+});
+$('resetHoles').addEventListener('click', ()=>{ holes = []; renderHoleTable(); });
+
+holeTableBody.addEventListener('click', (e)=>{ if(e.target.classList.contains('remove-hole')){ const idx = +e.target.dataset.i; holes.splice(idx,1); renderHoleTable(); } });
+
+document.getElementsByName('algo').forEach(r=>{ r.addEventListener('change', ()=>{ $('algoLabel').innerText = document.querySelector('input[name=algo]:checked').parentNode.innerText.trim(); }); });
+
+$('runBtn').addEventListener('click', ()=>{ runGenerateTrace(); });
+
+/* Play / Pause fixed: Play auto-runs trace if none, Pause reliably cancels RAF */
+$('playBtn').addEventListener('click', ()=>{
+  if(!trace.length){
+    // auto-generate trace for intuitive flow
+    runGenerateTrace();
+    if(!trace.length) return;
+  }
+  if(playing) return;
+  playing = true; lastTime = performance.now(); playAccumulator = 0;
+  // requestAnimationFrame with immediate start
+  raf = requestAnimationFrame(playLoop);
+  $('statusLabel').innerText = 'Playing';
+  addLog('Playback started');
+});
+$('pauseBtn').addEventListener('click', ()=>{
+  if(!playing){ $('statusLabel').innerText = 'Paused'; return; }
+  playing = false;
+  if(raf){ cancelAnimationFrame(raf); raf = null; }
+  $('statusLabel').innerText = 'Paused';
+  addLog('Playback paused');
+});
+$('nextBtn').addEventListener('click', ()=>{ stepForward(); });
+$('prevBtn').addEventListener('click', ()=>{ stepBack(); });
+$('restartBtn').addEventListener('click', ()=>{ if(!trace.length) return; step = 0; updateView(); $('statusLabel').innerText = 'Restarted'; addLog('Restarted to step 0'); });
+
+$('exportPNG').addEventListener('click', ()=>{ const dataUrl = canvas.toDataURL('image/png'); const a = document.createElement('a'); a.href = dataUrl; a.download = 'memory_alloc.png'; a.click(); });
+$('exportTrace').addEventListener('click', ()=>{ if(!trace.length){ alert('No trace available. Run first.'); return; } const blob = new Blob([JSON.stringify(trace,null,2)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'trace.json'; a.click(); URL.revokeObjectURL(url); });
+$('clearAll').addEventListener('click', ()=>{ if(!confirm('Clear processes, holes, and traces?')) return; processes=[]; holes=[]; trace=[]; step=0; renderProcTable(); renderHoleTable(); updateView(); logEl.textContent=''; updateTotals(); });
+
+const timeline = $('timeline');
+timeline.addEventListener('input', ()=>{ const v = parseInt(timeline.value) || 0; step = v; updateView(); });
+$('speed').addEventListener('input', (e)=>{ const v = parseFloat(e.target.value); $('speedLabel').innerText = v.toFixed(2)+'x'; playInterval = 600 / v; });
+
+/* Helpers */
+function mergeHoleInputs(inputs){
+  if(!inputs.length) return [];
+  const sorted = inputs.slice().sort((a,b)=>a.start - b.start);
+  const out = [];
+  for(const h of sorted){
+    if(!out.length) out.push({...h});
+    else{
+      const last = out[out.length-1];
+      if(last.start + last.size >= h.start){
+        const newEnd = Math.max(last.start + last.size, h.start + h.size);
+        last.size = newEnd - last.start;
+      } else out.push({...h});
+    }
+  }
+  return out;
+}
+
+function runGenerateTrace(){
+  const memSize = parseInt($('memSize').value) || 0;
+  if(memSize <= 0){ alert('Set valid memory size'); return; }
+  if(processes.some(p=>p.size <= 0)){ alert('Ensure all processes have size > 0'); return; }
+  const algo = document.querySelector('input[name=algo]:checked').value;
+  trace = generateTrace(memSize, processes, algo, holes);
+  step = 0;
+  timeline.max = Math.max(0, trace.length - 1);
+  timeline.value = 0;
+  $('maxStep').innerText = trace.length - 1;
+  logEl.textContent = '';
+  addLog(`Generated trace (${trace.length} steps) using ${algo} algorithm`);
+  updateView();
+  computeStats();
+}
+
+/* Play loop */
+function playLoop(now){
+  if(!playing){ if(raf){ cancelAnimationFrame(raf); raf = null; } return; }
+  raf = requestAnimationFrame(playLoop);
+  if(!lastTime) lastTime = now;
+  const dt = now - lastTime; lastTime = now;
+  playAccumulator += dt;
+  if(playAccumulator >= playInterval){
+    playAccumulator = 0;
+    if(step < trace.length - 1){ step++; updateView(); timeline.value = step; }
+    else { playing = false; if(raf){ cancelAnimationFrame(raf); raf = null; } $('statusLabel').innerText = 'Finished'; addLog('Playback finished'); }
+  }
+}
+
+/* Step controls */
+function stepForward(){ if(trace.length && step < trace.length - 1){ step++; updateView(); timeline.value = step; } }
+function stepBack(){ if(trace.length && step > 0){ step--; updateView(); timeline.value = step; } }
+
+/* Update view */
+function updateView(){
+  if(!trace.length){ renderer.clear(); $('curStep').innerText = 0; $('maxStep').innerText = 0; $('util').innerText = '0%'; return; }
+  const frame = trace[step];
+  renderer.render(frame.mem, frame.activeProc);
+  $('curStep').innerText = step;
+  $('maxStep').innerText = trace.length - 1;
+  $('statusLabel').innerText = frame.event;
+  logEl.textContent = '';
+  for(let i=0;i<=step;i++){
+    const f = trace[i];
+    logEl.textContent += `[t=${f.time}] ${f.event}\n`;
+  }
+  const used = frame.mem.segments.filter(s=>s.type==='alloc').reduce((s,v)=>s+v.size, 0);
+  const util = Math.round((used / frame.mem.size) * 100);
+  $('util').innerText = util + '%';
+}
+
+/* compute stats */
+function computeStats(){
+  if(!trace.length){ $('avgWaiting').innerText='—'; $('avgTurn').innerText='—'; $('extFrag').innerText='—'; $('totalProc').innerText=processes.length; return; }
+  const last = trace[trace.length-1];
+  const finished = last.finished || [];
+  const avgTurn = finished.length ? Math.round(finished.reduce((s,p)=>s + ((p.finishTime||0) - (p.arrival||0)),0) / finished.length) : 0;
+  const avgWait = finished.length ? Math.round(finished.reduce((s,p)=>s + Math.max(0, ((p.finishTime||0) - (p.arrival||0) - 0)),0) / finished.length) : 0;
+  const frame = trace[trace.length-1];
+  const frag = frame.mem.segments.filter(s=>s.type==='hole' && s.size < 32).reduce((s,h)=>s + h.size, 0);
+  $('avgWaiting').innerText = avgWait + ' (approx)';
+  $('avgTurn').innerText = avgTurn + 'ms';
+  $('extFrag').innerText = frag + ' KB';
+  $('totalProc').innerText = processes.length;
+}
+function updateTotals(){ $('totalProc').innerText = processes.length; }
+
+renderProcTable(); renderHoleTable(); updateTotals();
+
+/* seed demo */
+(function seedDemo(){
+  processes = [{id:'P1',size:200,arrival:0},{id:'P2',size:350,arrival:1},{id:'P3',size:100,arrival:2},{id:'P4',size:400,arrival:4}];
+  renderProcTable(); updateTotals();
+})();
+</script>
+</body>
+</html>
