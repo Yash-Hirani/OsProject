@@ -26,3 +26,11 @@ A comprehensive web-based visualization tool for memory allocation algorithms wi
 - Responsive design with dark theme
 
 ## File Structure
+
+![alt text](image.png)
+
+## Screenshots
+
+![alt text](image-1.png)
+![alt text](image-2.png)
+![alt text](image-3.png)
