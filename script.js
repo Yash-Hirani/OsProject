@@ -303,13 +303,13 @@ const partitionCanvas = document.getElementById('partitionCanvas');
 const renderer = new Renderer(canvas);
 const partitionRenderer = new PartitionRenderer(partitionCanvas);
 
-/* comparison renderers (created lazily) */
+/* comparison renderers (created lazily) - using PartitionRenderer for comparison mode */
 let rendererFF = null, rendererBF = null, rendererWF = null;
 
 let processes = [];
 let partitions = [];
 let trace = [];            // single mode trace
-let traceFF = [], traceBF = [], traceWF = []; // comparison traces
+let traceFF = [], traceBF = [], traceWF = []; // comparison traces (partition mode)
 let partitionTrace = [];   // partition mode trace
 let step = 0;
 let playing = false;
@@ -400,7 +400,13 @@ function switchMode(mode){
         compTabBtn.style.background = 'linear-gradient(90deg,var(--accent),#9b5cff)';
         compTabBtn.style.color = 'white';
         compPanel.style.display = 'block';
-        defaultRightPanel.style.display = 'flex';
+        partitionRightPanel.style.display = 'block';
+        // Force resize of comparison canvases when switching to comparison mode
+        setTimeout(() => {
+            if(rendererFF) rendererFF.resize();
+            if(rendererBF) rendererBF.resize();
+            if(rendererWF) rendererWF.resize();
+        }, 100);
     } else if(mode === 'partition'){
         partTabBtn.style.background = 'linear-gradient(90deg,var(--accent),#9b5cff)';
         partTabBtn.style.color = 'white';
@@ -481,21 +487,22 @@ function runGenerateTrace(){
         computeStats();
         showFloatingBar();
     } else if(currentMode === 'comparison'){
-        traceFF = generateTrace(memSize, processes, 'first');
-        traceBF = generateTrace(memSize, processes, 'best');
-        traceWF = generateTrace(memSize, processes, 'worst');
+        if(partitions.length === 0){ alert('Add at least one partition for comparison mode'); return; }
+        traceFF = generatePartitionTrace(partitions, processes, 'first');
+        traceBF = generatePartitionTrace(partitions, processes, 'best');
+        traceWF = generatePartitionTrace(partitions, processes, 'worst');
         step = 0;
         const maxLen = Math.max(traceFF.length, traceBF.length, traceWF.length);
         $('timelineC').max = Math.max(0, maxLen - 1);
         $('timelineC').value = 0;
         $('maxStepC').innerText = maxLen - 1;
-        $('logFF').innerText = 'Comparison run started.\n';
-        $('logBF').innerText = 'Comparison run started.\n';
-        $('logWF').innerText = 'Comparison run started.\n';
-        addLog(`Generated comparison traces — FF:${traceFF.length}, BF:${traceBF.length}, WF:${traceWF.length}`);
-        if(!rendererFF){ rendererFF = new Renderer($('canvasFF')); }
-        if(!rendererBF){ rendererBF = new Renderer($('canvasBF')); }
-        if(!rendererWF){ rendererWF = new Renderer($('canvasWF')); }
+        $('logFF').innerText = 'Comparison run started (First Fit).\n';
+        $('logBF').innerText = 'Comparison run started (Best Fit).\n';
+        $('logWF').innerText = 'Comparison run started (Worst Fit).\n';
+        addLog(`Generated partition comparison traces — FF:${traceFF.length}, BF:${traceBF.length}, WF:${traceWF.length}`);
+        if(!rendererFF){ rendererFF = new PartitionRenderer($('canvasFF')); }
+        if(!rendererBF){ rendererBF = new PartitionRenderer($('canvasBF')); }
+        if(!rendererWF){ rendererWF = new PartitionRenderer($('canvasWF')); }
         updateComparisonView();
         computeComparisonStats();
         showFloatingBar();
@@ -524,7 +531,7 @@ $('playBtn').addEventListener('click', ()=>{
     if(currentMode === 'comparison' && (!traceFF.length && !traceBF.length && !traceWF.length)) runGenerateTrace();
     if(currentMode === 'partition' && !partitionTrace.length) runGenerateTrace();
     if((currentMode === 'single' && !trace.length) || 
-       (currentMode === 'comparison' && !traceFF.length && !traceBF.length && !traceWF.length) ||
+       (currentMode === 'comparison' && (!traceFF.length && !traceBF.length && !traceWF.length)) ||
        (currentMode === 'partition' && !partitionTrace.length)) return;
     if(playing) return;
     playing = true; lastTime = performance.now(); playAccumulator = 0;
@@ -560,7 +567,14 @@ $('restartBtn').addEventListener('click', ()=>{
 
 /* exports & clear */
 $('exportPNG').addEventListener('click', ()=>{ 
-    const url = (currentMode === 'partition' ? partitionCanvas : canvas).toDataURL('image/png'); 
+    let targetCanvas = canvas;
+    if(currentMode === 'partition') {
+        targetCanvas = partitionCanvas;
+    } else if(currentMode === 'comparison' && rendererFF) {
+        // Export first fit canvas for comparison mode
+        targetCanvas = $('canvasFF');
+    }
+    const url = targetCanvas.toDataURL('image/png'); 
     const a = document.createElement('a'); a.href = url; a.download = 'memory_alloc.png'; a.click(); 
 });
 $('exportTrace').addEventListener('click', ()=>{ 
@@ -613,7 +627,7 @@ function playLoop(now){
         } else if(currentMode === 'comparison'){
             const maxLen = Math.max(traceFF.length, traceBF.length, traceWF.length);
             if(step < maxLen - 1){ step++; updateComparisonView(); $('timelineC').value = step; }
-            else { playing = false; if(raf){ cancelAnimationFrame(raf); raf = null; } addLog('Playback finished (comparison)'); $('statusLabel').innerText = 'Finished'; }
+            else { playing = false; if(raf){ cancelAnimationFrame(raf); raf = null; } addLog('Playback finished (partition comparison)'); $('statusLabel').innerText = 'Finished'; }
         } else if(currentMode === 'partition'){
             if(step < partitionTrace.length - 1){ step++; updatePartitionView(); $('timelineP').value = step; }
             else { playing = false; if(raf){ cancelAnimationFrame(raf); raf = null; } addPartitionLog('Playback finished'); $('statusLabelP').innerText = 'Finished'; }
@@ -658,56 +672,80 @@ function updateView(){
     $('summaryAlloc').innerText = `Allocations: ${processes.length}`;
 }
 
+/* helper: compute partition stats */
+function computePartitionStatsFromTrace(frame){
+    if(!frame || !frame.partitions) return {util:0, freePartitions:0, allocatedPartitions:0, totalWaste:0};
+    const allocatedSize = frame.allocations.reduce((sum, a) => sum + a.procSize, 0);
+    const totalPartitionSize = frame.partitions.reduce((sum, p) => sum + p.size, 0);
+    const util = totalPartitionSize ? Math.round((allocatedSize / totalPartitionSize) * 100) : 0;
+    const freePartitions = frame.partitions.filter(p => !frame.allocations.some(a => a.partitionId === p.id)).length;
+    const allocatedPartitions = frame.allocations.length;
+    const totalWaste = frame.allocations.reduce((sum, a) => {
+        const part = frame.partitions.find(p => p.id === a.partitionId);
+        return sum + (part ? part.size - a.procSize : 0);
+    }, 0);
+    return {util, freePartitions, allocatedPartitions, totalWaste};
+}
+
 /* update comparison view */
 function updateComparisonView(){
     if(rendererFF && traceFF.length) {
         const idx = Math.min(step, traceFF.length - 1);
         const fff = traceFF[idx];
-        rendererFF.render(fff.mem, fff.activeProc);
-        if(idx >= 0) {
-            $('logFF').innerText = `t=${fff.time} | ${fff.event}\n` + $('logFF').innerText;
+        rendererFF.render(fff.partitions, fff.allocations);
+        // Update log - show all events up to current step
+        $('logFF').innerText = '';
+        for(let i=0;i<=idx;i++){ 
+            const f = traceFF[i]; 
+            $('logFF').innerText += `[t=${f.time}] ${f.event}\n`; 
         }
-        const s = computeF3(fff.mem);
+        const s = computePartitionStatsFromTrace(fff);
         $('statFF').innerText = `Util: ${s.util}%`;
-        $('fragCountFF').innerText = `Free blocks: ${s.freeBlocks}`;
-        $('largestFreeFF').innerText = `Largest free: ${s.largestFree} KB`;
-        $('extFragFF').innerText = `Ext frag: ${s.extFrag} KB`;
+        $('fragCountFF').innerText = `Free partitions: ${s.freePartitions}`;
+        $('largestFreeFF').innerText = `Allocated: ${s.allocatedPartitions}`;
+        $('extFragFF').innerText = `Waste: ${s.totalWaste} KB`;
     } else if(rendererFF) { rendererFF.clear(); $('statFF').innerText = 'No alloc'; }
 
     if(rendererBF && traceBF.length) {
         const idx = Math.min(step, traceBF.length - 1);
         const fbf = traceBF[idx];
-        rendererBF.render(fbf.mem, fbf.activeProc);
-        if(idx >= 0) {
-            $('logBF').innerText = `t=${fbf.time} | ${fbf.event}\n` + $('logBF').innerText;
+        rendererBF.render(fbf.partitions, fbf.allocations);
+        // Update log - show all events up to current step
+        $('logBF').innerText = '';
+        for(let i=0;i<=idx;i++){ 
+            const f = traceBF[i]; 
+            $('logBF').innerText += `[t=${f.time}] ${f.event}\n`; 
         }
-        const s = computeF3(fbf.mem);
+        const s = computePartitionStatsFromTrace(fbf);
         $('statBF').innerText = `Util: ${s.util}%`;
-        $('fragCountBF').innerText = `Free blocks: ${s.freeBlocks}`;
-        $('largestFreeBF').innerText = `Largest free: ${s.largestFree} KB`;
-        $('extFragBF').innerText = `Ext frag: ${s.extFrag} KB`;
+        $('fragCountBF').innerText = `Free partitions: ${s.freePartitions}`;
+        $('largestFreeBF').innerText = `Allocated: ${s.allocatedPartitions}`;
+        $('extFragBF').innerText = `Waste: ${s.totalWaste} KB`;
     } else if(rendererBF) { rendererBF.clear(); $('statBF').innerText = 'No alloc'; }
 
     if(rendererWF && traceWF.length) {
         const idx = Math.min(step, traceWF.length - 1);
         const fwf = traceWF[idx];
-        rendererWF.render(fwf.mem, fwf.activeProc);
-        if(idx >= 0) {
-            $('logWF').innerText = `t=${fwf.time} | ${fwf.event}\n` + $('logWF').innerText;
+        rendererWF.render(fwf.partitions, fwf.allocations);
+        // Update log - show all events up to current step
+        $('logWF').innerText = '';
+        for(let i=0;i<=idx;i++){ 
+            const f = traceWF[i]; 
+            $('logWF').innerText += `[t=${f.time}] ${f.event}\n`; 
         }
-        const s = computeF3(fwf.mem);
+        const s = computePartitionStatsFromTrace(fwf);
         $('statWF').innerText = `Util: ${s.util}%`;
-        $('fragCountWF').innerText = `Free blocks: ${s.freeBlocks}`;
-        $('largestFreeWF').innerText = `Largest free: ${s.largestFree} KB`;
-        $('extFragWF').innerText = `Ext frag: ${s.extFrag} KB`;
+        $('fragCountWF').innerText = `Free partitions: ${s.freePartitions}`;
+        $('largestFreeWF').innerText = `Allocated: ${s.allocatedPartitions}`;
+        $('extFragWF').innerText = `Waste: ${s.totalWaste} KB`;
     } else if(rendererWF) { rendererWF.clear(); $('statWF').innerText = 'No alloc'; }
 
     const maxLen = Math.max(traceFF.length, traceBF.length, traceWF.length);
     $('curStepC').innerText = step;
     $('maxStepC').innerText = Math.max(0, maxLen - 1);
-    const uFF = (traceFF.length ? computeF3(traceFF[Math.min(step, traceFF.length-1)].mem).util : 0);
-    const uBF = (traceBF.length ? computeF3(traceBF[Math.min(step, traceBF.length-1)].mem).util : 0);
-    const uWF = (traceWF.length ? computeF3(traceWF[Math.min(step, traceWF.length-1)].mem).util : 0);
+    const uFF = (traceFF.length ? computePartitionStatsFromTrace(traceFF[Math.min(step, traceFF.length-1)]).util : 0);
+    const uBF = (traceBF.length ? computePartitionStatsFromTrace(traceBF[Math.min(step, traceBF.length-1)]).util : 0);
+    const uWF = (traceWF.length ? computePartitionStatsFromTrace(traceWF[Math.min(step, traceWF.length-1)]).util : 0);
     const count = (traceFF.length?1:0) + (traceBF.length?1:0) + (traceWF.length?1:0);
     const avgUtil = count ? Math.round((uFF + uBF + uWF)/count) : 0;
     $('utilC').innerText = avgUtil + '%';

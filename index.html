@@ -83,9 +83,9 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                     <div>
                         <div class="h1">Comparison Mode</div>
-                        <div class="hsub">First Fit → Best Fit → Worst Fit — synchronized playback</div>
+                        <div class="hsub">Fixed partitions with process allocation — First Fit | Best Fit | Worst Fit</div>
                     </div>
-                    <div class="hsub">Comparison: First | Best | Worst</div>
+                    <div class="hsub">Partition Allocation Comparison</div>
                 </div>
 
                 <div class="comp-vertical">
@@ -95,9 +95,9 @@
                         <canvas id="canvasFF" class="comp-canvas" width="780" height="220"></canvas>
                         <div class="comp-stats-row">
                             <div class="stat-pill" id="statFF">Util: —%</div>
-                            <div class="stat-pill" id="fragCountFF">Free blocks: —</div>
-                            <div class="stat-pill" id="largestFreeFF">Largest free: — KB</div>
-                            <div class="stat-pill" id="extFragFF">Ext frag: — KB</div>
+                            <div class="stat-pill" id="fragCountFF">Free partitions: —</div>
+                            <div class="stat-pill" id="largestFreeFF">Allocated: —</div>
+                            <div class="stat-pill" id="extFragFF">Waste: — KB</div>
                         </div>
                         <div class="alg-log" id="logFF">No logs yet.</div>
                     </div>
@@ -108,9 +108,9 @@
                         <canvas id="canvasBF" class="comp-canvas" width="780" height="220"></canvas>
                         <div class="comp-stats-row">
                             <div class="stat-pill" id="statBF">Util: —%</div>
-                            <div class="stat-pill" id="fragCountBF">Free blocks: —</div>
-                            <div class="stat-pill" id="largestFreeBF">Largest free: — KB</div>
-                            <div class="stat-pill" id="extFragBF">Ext frag: — KB</div>
+                            <div class="stat-pill" id="fragCountBF">Free partitions: —</div>
+                            <div class="stat-pill" id="largestFreeBF">Allocated: —</div>
+                            <div class="stat-pill" id="extFragBF">Waste: — KB</div>
                         </div>
                         <div class="alg-log" id="logBF">No logs yet.</div>
                     </div>
@@ -121,9 +121,9 @@
                         <canvas id="canvasWF" class="comp-canvas" width="780" height="220"></canvas>
                         <div class="comp-stats-row">
                             <div class="stat-pill" id="statWF">Util: —%</div>
-                            <div class="stat-pill" id="fragCountWF">Free blocks: —</div>
-                            <div class="stat-pill" id="largestFreeWF">Largest free: — KB</div>
-                            <div class="stat-pill" id="extFragWF">Ext frag: — KB</div>
+                            <div class="stat-pill" id="fragCountWF">Free partitions: —</div>
+                            <div class="stat-pill" id="largestFreeWF">Allocated: —</div>
+                            <div class="stat-pill" id="extFragWF">Waste: — KB</div>
                         </div>
                         <div class="alg-log" id="logWF">No logs yet.</div>
                     </div>
